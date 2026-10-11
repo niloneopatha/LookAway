@@ -13,9 +13,89 @@ data class UserStats(
     val dailyGoalMinutes: Int = 240, // Default 4 hours
     val todayScreenTimeMinutes: Int = 0,
     val weeklyScreenTimeMinutes: Int = 0,
-    val neckStretchingMinutes: Int = 0,
+    val neckStretchingCount: Int = 0,
+    val eyeTrackingEnabled: Boolean = false,
+    val eyeTrackingLookAways: Int = 0,
     val lastBreakDate: String = "",
+) {
+    val healthScore: Int
+        get() {
+            var score = 70
+            score += minOf(currentStreak * 2, 15)
+            score += minOf(neckStretchingCount * 1, 15)
+            score += minOf(totalBreaks * 1, 10)
+            if (todayScreenTimeMinutes > dailyGoalMinutes && dailyGoalMinutes > 0) {
+                score -= 15
+            } else {
+                score += 10
+            }
+            return score.coerceIn(0, 100)
+        }
+}
+
+data class Achievement(
+    val id: String,
+    val title: String,
+    val description: String,
+    val icon: String,
+    val unlocked: Boolean
 )
+
+object AchievementManager {
+    fun getAchievements(stats: UserStats): List<Achievement> {
+        return listOf(
+            Achievement(
+                id = "first_break",
+                title = "First Break",
+                description = "Log your very first eye break",
+                icon = "🥇",
+                unlocked = stats.totalBreaks >= 1
+            ),
+            Achievement(
+                id = "10_breaks",
+                title = "10 Breaks",
+                description = "Complete 10 total eye breaks",
+                icon = "🥈",
+                unlocked = stats.totalBreaks >= 10
+            ),
+            Achievement(
+                id = "50_breaks",
+                title = "50 Breaks",
+                description = "Complete 50 total eye breaks",
+                icon = "🥉",
+                unlocked = stats.totalBreaks >= 50
+            ),
+            Achievement(
+                id = "7_streak",
+                title = "7 Streak",
+                description = "Reach a 7-break streak",
+                icon = "🔥",
+                unlocked = stats.currentStreak >= 7 || stats.longestStreak >= 7
+            ),
+            Achievement(
+                id = "30_streak",
+                title = "30 Streak",
+                description = "Reach a 30-break streak",
+                icon = "🏆",
+                unlocked = stats.currentStreak >= 30 || stats.longestStreak >= 30
+            ),
+            Achievement(
+                id = "20_stretches",
+                title = "20 Neck Stretches",
+                description = "Perform 20 neck stretches",
+                icon = "🦒",
+                unlocked = stats.neckStretchingCount >= 20
+            ),
+            Achievement(
+                id = "vigilant_eye",
+                title = "Vigilant Eye",
+                description = "Detect 5 automatic look-aways",
+                icon = "👁️",
+                unlocked = stats.eyeTrackingLookAways >= 5
+            )
+        )
+    }
+}
 
 object StatsManager {
     private const val PREFS_NAME = "look_away_stats_prefs"
@@ -24,7 +104,9 @@ object StatsManager {
     private const val KEY_TOTAL_BREAKS = "total_breaks"
     private const val KEY_DAILY_GOAL_MINUTES = "daily_goal_minutes"
     private const val KEY_TODAY_SCREEN_TIME = "today_screen_time"
-    private const val KEY_NECK_STRETCHING = "neck_stretching_minutes"
+    private const val KEY_NECK_STRETCHING = "neck_stretching_count"
+    private const val KEY_EYE_TRACKING_ENABLED = "eye_tracking_enabled"
+    private const val KEY_EYE_TRACKING_LOOK_AWAYS = "eye_tracking_look_aways"
     private const val KEY_LAST_BREAK_DATE = "last_break_date"
 
     private fun getTodayDateString(): String {
@@ -69,6 +151,8 @@ object StatsManager {
 
         val neckStretchKey = "neck_stretching_$today"
         val neckStretching = prefs.getInt(neckStretchKey, prefs.getInt(KEY_NECK_STRETCHING, 0))
+        val eyeTrackingEnabled = prefs.getBoolean(KEY_EYE_TRACKING_ENABLED, false)
+        val eyeTrackingLookAways = prefs.getInt(KEY_EYE_TRACKING_LOOK_AWAYS, 0)
 
         return UserStats(
             currentStreak = streak,
@@ -77,7 +161,9 @@ object StatsManager {
             dailyGoalMinutes = prefs.getInt(KEY_DAILY_GOAL_MINUTES, 240),
             todayScreenTimeMinutes = autoScreenTime,
             weeklyScreenTimeMinutes = weeklyScreenTime,
-            neckStretchingMinutes = neckStretching,
+            neckStretchingCount = neckStretching,
+            eyeTrackingEnabled = eyeTrackingEnabled,
+            eyeTrackingLookAways = eyeTrackingLookAways,
             lastBreakDate = lastDate,
         )
     }
@@ -120,17 +206,29 @@ object StatsManager {
             .apply()
     }
 
-    fun addNeckStretchingMinutes(context: Context, minutes: Int) {
+    fun addNeckStretchCount(context: Context, delta: Int) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val today = getTodayDateString()
         val todayKey = "neck_stretching_$today"
         val current = prefs.getInt(todayKey, prefs.getInt(KEY_NECK_STRETCHING, 0))
-        val total = current + minutes
+        val total = maxOf(0, current + delta)
 
         prefs.edit()
             .putInt(todayKey, total)
             .putInt(KEY_NECK_STRETCHING, total)
             .apply()
+    }
+
+    fun updateEyeTrackingEnabled(context: Context, enabled: Boolean) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putBoolean(KEY_EYE_TRACKING_ENABLED, enabled).apply()
+    }
+
+    fun incrementEyeTrackingLookAways(context: Context): UserStats {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val current = prefs.getInt(KEY_EYE_TRACKING_LOOK_AWAYS, 0)
+        prefs.edit().putInt(KEY_EYE_TRACKING_LOOK_AWAYS, current + 1).apply()
+        return getStats(context)
     }
 
     fun resetStats(context: Context) {

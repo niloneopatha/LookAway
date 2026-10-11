@@ -6,6 +6,12 @@ import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import com.example.lookaway.stats.UsageAccessHelper
+import com.example.lookaway.stats.AchievementManager
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -164,14 +170,29 @@ fun NotificationScreen(modifier: Modifier = Modifier) {
         }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        horizontalAlignment = Alignment.Start
+    var isRefreshing by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = {
+            isRefreshing = true
+            userStats = StatsManager.getStats(context)
+            coroutineScope.launch {
+                kotlinx.coroutines.delay(500)
+                isRefreshing = false
+            }
+        },
+        modifier = modifier.fillMaxSize()
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalAlignment = Alignment.Start
+        ) {
         // Hero Header Card
         Box(
             modifier = Modifier
@@ -318,6 +339,56 @@ fun NotificationScreen(modifier: Modifier = Modifier) {
             }
         }
 
+        // Health Score Card
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Daily Health Score 💚",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Based on screen time, breaks & neck stretches.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        text = "${userStats.healthScore}/100",
+                        style = MaterialTheme.typography.headlineMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                LinearProgressIndicator(
+                    progress = { userStats.healthScore / 100f },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp)),
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+
         // Today's Screen Time Card
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
@@ -427,21 +498,21 @@ fun NotificationScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        // Neck Stretching Card (Reusing manual entry)
+        // Neck Stretching Card (Count each stretch)
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "Neck Stretching 🧘",
+                    text = "Neck Stretching 🦒",
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontWeight = FontWeight.Bold
                     )
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Log time spent on neck stretching and posture exercises.",
+                    text = "Tap + each time you do a neck stretch session.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -454,8 +525,80 @@ fun NotificationScreen(modifier: Modifier = Modifier) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Today's Stretch: ${userStats.neckStretchingMinutes / 60}h ${userStats.neckStretchingMinutes % 60}m",
+                        text = "Total Stretches: ${userStats.neckStretchingCount}",
                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium)
+                    )
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilledTonalButton(
+                            onClick = {
+                                StatsManager.addNeckStretchCount(context, -1)
+                                userStats = StatsManager.getStats(context)
+                            },
+                            modifier = Modifier.size(40.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Text("-", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Text(
+                            text = "${userStats.neckStretchingCount}",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            modifier = Modifier.padding(horizontal = 4.dp)
+                        )
+
+                        FilledTonalButton(
+                            onClick = {
+                                StatsManager.addNeckStretchCount(context, 1)
+                                userStats = StatsManager.getStats(context)
+                                Toast.makeText(context, "Neck stretch logged! 🦒", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.size(40.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Text("+", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Automatic Eye Tracking Card
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Automatic Eye Tracking 👁️",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Detects when you look away for > 10 seconds.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = userStats.eyeTrackingEnabled,
+                        onCheckedChange = { enabled ->
+                            StatsManager.updateEyeTrackingEnabled(context, enabled)
+                            userStats = StatsManager.getStats(context)
+                        }
                     )
                 }
 
@@ -463,26 +606,40 @@ fun NotificationScreen(modifier: Modifier = Modifier) {
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    FilledTonalButton(
+                    Text(
+                        text = "Look-aways (>10s detected):",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium)
+                    )
+                    Text(
+                        text = "${userStats.eyeTrackingLookAways}",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    )
+                }
+
+                if (userStats.eyeTrackingEnabled) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "🟢 Camera tracking active. Automatically increments when looked away > 10s.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
                         onClick = {
-                            StatsManager.addNeckStretchingMinutes(context, 30)
-                            userStats = StatsManager.getStats(context)
+                            userStats = StatsManager.incrementEyeTrackingLookAways(context)
+                            Toast.makeText(context, "Looked away for >10s detected!", Toast.LENGTH_SHORT).show()
                         },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("+30m Stretch", fontSize = 12.sp)
-                    }
-                    FilledTonalButton(
-                        onClick = {
-                            StatsManager.addNeckStretchingMinutes(context, 60)
-                            userStats = StatsManager.getStats(context)
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("+1h Stretch", fontSize = 12.sp)
+                        Text("Simulate Look Away (>10s)")
                     }
                 }
             }
@@ -528,6 +685,72 @@ fun NotificationScreen(modifier: Modifier = Modifier) {
                             color = MaterialTheme.colorScheme.primary
                         )
                     )
+                }
+            }
+        }
+
+        // Achievements Card
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Achievements 🎖️",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Unlock badges as you maintain healthy screen habits.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                val achievements = AchievementManager.getAchievements(userStats)
+                achievements.forEach { achievement ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = achievement.icon,
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                            Column {
+                                Text(
+                                    text = achievement.title,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (achievement.unlocked) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                    )
+                                )
+                                Text(
+                                    text = achievement.description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (achievement.unlocked) 1f else 0.5f)
+                                )
+                            }
+                        }
+                        Text(
+                            text = if (achievement.unlocked) "Unlocked ✅" else "Locked 🔒",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (achievement.unlocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            )
+                        )
+                    }
                 }
             }
         }
@@ -650,6 +873,7 @@ fun NotificationScreen(modifier: Modifier = Modifier) {
         ) {
             Text("Send Test Notification Now", fontWeight = FontWeight.Bold)
         }
+      }
     }
 }
 
