@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
+import com.example.lookaway.stats.UsageAccessHelper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -317,21 +318,21 @@ fun NotificationScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        // Daily Screen Time Goal Tracker Card
+        // Today's Screen Time Card
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "Daily Screen Time Goal ⏱️",
+                    text = "Today's Screen Time ⏱️",
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontWeight = FontWeight.Bold
                     )
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Set your daily limit and track screen time progress.",
+                    text = "Track your daily usage against your goal.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -383,58 +384,105 @@ fun NotificationScreen(modifier: Modifier = Modifier) {
                         fontWeight = FontWeight.SemiBold
                     )
                 }
+            }
+        }
+
+        // Daily Goal Setting Card
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Daily Goal Setting 🎯",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Set your desired daily screen time limit.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Set Goal & Track Screen Time
+                OutlinedTextField(
+                    value = goalHoursInput,
+                    onValueChange = { input ->
+                        goalHoursInput = input
+                        val hours = input.toDoubleOrNull()
+                        if (hours != null && hours > 0) {
+                            val minutes = (hours * 60).toInt()
+                            StatsManager.updateDailyGoal(context, minutes)
+                            userStats = StatsManager.getStats(context)
+                        }
+                    },
+                    label = { Text("Goal (Hours)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+            }
+        }
+
+        // Neck Stretching Card (Reusing manual entry)
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Neck Stretching 🧘",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Log time spent on neck stretching and posture exercises.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    OutlinedTextField(
-                        value = goalHoursInput,
-                        onValueChange = { input ->
-                            goalHoursInput = input
-                            val hours = input.toDoubleOrNull()
-                            if (hours != null && hours > 0) {
-                                val minutes = (hours * 60).toInt()
-                                StatsManager.updateDailyGoal(context, minutes)
-                                userStats = StatsManager.getStats(context)
-                            }
-                        },
-                        label = { Text("Goal (Hours)") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    Text(
+                        text = "Today's Stretch: ${userStats.neckStretchingMinutes / 60}h ${userStats.neckStretchingMinutes % 60}m",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium)
                     )
+                }
 
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Add Screen Time",
-                            style = MaterialTheme.typography.labelMedium
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            FilledTonalButton(
-                                onClick = {
-                                    StatsManager.addScreenTimeMinutes(context, 30)
-                                    userStats = StatsManager.getStats(context)
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("+30m", fontSize = 12.sp)
-                            }
-                            FilledTonalButton(
-                                onClick = {
-                                    StatsManager.addScreenTimeMinutes(context, 60)
-                                    userStats = StatsManager.getStats(context)
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("+1h", fontSize = 12.sp)
-                            }
-                        }
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FilledTonalButton(
+                        onClick = {
+                            StatsManager.addNeckStretchingMinutes(context, 30)
+                            userStats = StatsManager.getStats(context)
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("+30m Stretch", fontSize = 12.sp)
+                    }
+                    FilledTonalButton(
+                        onClick = {
+                            StatsManager.addNeckStretchingMinutes(context, 60)
+                            userStats = StatsManager.getStats(context)
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("+1h Stretch", fontSize = 12.sp)
                     }
                 }
             }
@@ -480,6 +528,39 @@ fun NotificationScreen(modifier: Modifier = Modifier) {
                             color = MaterialTheme.colorScheme.primary
                         )
                     )
+                }
+            }
+        }
+
+        if (!UsageAccessHelper.hasUsageStatsPermission(context)) {
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Automatic Tracking ⚙️",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Enable Usage Access to track screen time automatically without manual entry.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = {
+                            UsageAccessHelper.requestUsageStatsPermission(context)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Grant Usage Access Permission")
+                    }
                 }
             }
         }

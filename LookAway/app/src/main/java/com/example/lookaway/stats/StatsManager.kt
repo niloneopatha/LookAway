@@ -13,6 +13,7 @@ data class UserStats(
     val dailyGoalMinutes: Int = 240, // Default 4 hours
     val todayScreenTimeMinutes: Int = 0,
     val weeklyScreenTimeMinutes: Int = 0,
+    val neckStretchingMinutes: Int = 0,
     val lastBreakDate: String = "",
 )
 
@@ -23,6 +24,7 @@ object StatsManager {
     private const val KEY_TOTAL_BREAKS = "total_breaks"
     private const val KEY_DAILY_GOAL_MINUTES = "daily_goal_minutes"
     private const val KEY_TODAY_SCREEN_TIME = "today_screen_time"
+    private const val KEY_NECK_STRETCHING = "neck_stretching_minutes"
     private const val KEY_LAST_BREAK_DATE = "last_break_date"
 
     private fun getTodayDateString(): String {
@@ -48,20 +50,34 @@ object StatsManager {
         val streak = prefs.getInt(KEY_STREAK, 0)
 
         val todayKey = "screen_time_$today"
-        val todayScreenTime = prefs.getInt(todayKey, prefs.getInt(KEY_TODAY_SCREEN_TIME, 0))
+        val autoScreenTime = if (UsageAccessHelper.hasUsageStatsPermission(context)) {
+            ScreenTimeTracker.getTodayScreenTimeMinutes(context).toInt()
+        } else {
+            prefs.getInt(todayKey, prefs.getInt(KEY_TODAY_SCREEN_TIME, 0))
+        }
+
+        prefs.edit().putInt(todayKey, autoScreenTime).putInt(KEY_TODAY_SCREEN_TIME, autoScreenTime).apply()
 
         val last7Days = getLast7DaysDates()
         val weeklyScreenTime = last7Days.sumOf { dateStr ->
-            prefs.getInt("screen_time_$dateStr", 0)
+            if (dateStr == today && UsageAccessHelper.hasUsageStatsPermission(context)) {
+                autoScreenTime
+            } else {
+                prefs.getInt("screen_time_$dateStr", 0)
+            }
         }
+
+        val neckStretchKey = "neck_stretching_$today"
+        val neckStretching = prefs.getInt(neckStretchKey, prefs.getInt(KEY_NECK_STRETCHING, 0))
 
         return UserStats(
             currentStreak = streak,
             longestStreak = longestStreak,
             totalBreaks = prefs.getInt(KEY_TOTAL_BREAKS, 0),
             dailyGoalMinutes = prefs.getInt(KEY_DAILY_GOAL_MINUTES, 240),
-            todayScreenTimeMinutes = todayScreenTime,
+            todayScreenTimeMinutes = autoScreenTime,
             weeklyScreenTimeMinutes = weeklyScreenTime,
+            neckStretchingMinutes = neckStretching,
             lastBreakDate = lastDate,
         )
     }
@@ -101,6 +117,19 @@ object StatsManager {
         prefs.edit()
             .putInt(todayKey, totalToday)
             .putInt(KEY_TODAY_SCREEN_TIME, totalToday)
+            .apply()
+    }
+
+    fun addNeckStretchingMinutes(context: Context, minutes: Int) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val today = getTodayDateString()
+        val todayKey = "neck_stretching_$today"
+        val current = prefs.getInt(todayKey, prefs.getInt(KEY_NECK_STRETCHING, 0))
+        val total = current + minutes
+
+        prefs.edit()
+            .putInt(todayKey, total)
+            .putInt(KEY_NECK_STRETCHING, total)
             .apply()
     }
 
