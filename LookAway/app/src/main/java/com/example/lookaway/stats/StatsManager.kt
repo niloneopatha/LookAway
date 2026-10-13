@@ -16,13 +16,14 @@ data class UserStats(
     val neckStretchingCount: Int = 0,
     val eyeTrackingEnabled: Boolean = false,
     val eyeTrackingLookAways: Int = 0,
+    val weeklyBreakCounts: List<Int> = listOf(0, 0, 0, 0, 0, 0, 0),
     val lastBreakDate: String = "",
 ) {
     val healthScore: Int
         get() {
             var score = 70
-            score += minOf(currentStreak * 2, 15)
-            score += minOf(neckStretchingCount * 1, 15)
+            score += minOf(currentStreak * 3, 20)
+            score += minOf(neckStretchingCount * 2, 15)
             score += minOf(totalBreaks * 1, 10)
             if (todayScreenTimeMinutes > dailyGoalMinutes && dailyGoalMinutes > 0) {
                 score -= 15
@@ -68,14 +69,14 @@ object AchievementManager {
             Achievement(
                 id = "7_streak",
                 title = "7 Streak",
-                description = "Reach a 7-break streak",
+                description = "Reach a 7-day break streak",
                 icon = "🔥",
                 unlocked = stats.currentStreak >= 7 || stats.longestStreak >= 7
             ),
             Achievement(
                 id = "30_streak",
                 title = "30 Streak",
-                description = "Reach a 30-break streak",
+                description = "Reach a 30-day break streak",
                 icon = "🏆",
                 unlocked = stats.currentStreak >= 30 || stats.longestStreak >= 30
             ),
@@ -124,6 +125,31 @@ object StatsManager {
         return dates
     }
 
+    fun getWeekBreakCounts(context: Context, weekOffset: Int): List<Int> {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val calendar = Calendar.getInstance()
+        calendar.add(Calendar.DAY_OF_YEAR, -(weekOffset * 7))
+
+        val dates = mutableListOf<String>()
+        repeat(7) {
+            dates.add(dateFormat.format(calendar.time))
+            calendar.add(Calendar.DAY_OF_YEAR, -1)
+        }
+        return dates.reversed().map { dateStr ->
+            prefs.getInt("break_count_$dateStr", 0)
+        }
+    }
+
+    fun getAllTimeAverageBreaks(context: Context): Float {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val totalBreaks = prefs.getInt(KEY_TOTAL_BREAKS, 0)
+        val allKeys = prefs.all.keys
+        val breakDays = allKeys.filter { it.startsWith("break_count_") }.size
+        if (breakDays == 0) return totalBreaks.toFloat()
+        return totalBreaks.toFloat() / breakDays.toFloat()
+    }
+
     fun getStats(context: Context): UserStats {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val today = getTodayDateString()
@@ -149,6 +175,8 @@ object StatsManager {
             }
         }
 
+        val weeklyBreakCounts = getWeekBreakCounts(context, 0)
+
         val neckStretchKey = "neck_stretching_$today"
         val neckStretching = prefs.getInt(neckStretchKey, prefs.getInt(KEY_NECK_STRETCHING, 0))
         val eyeTrackingEnabled = prefs.getBoolean(KEY_EYE_TRACKING_ENABLED, false)
@@ -164,6 +192,7 @@ object StatsManager {
             neckStretchingCount = neckStretching,
             eyeTrackingEnabled = eyeTrackingEnabled,
             eyeTrackingLookAways = eyeTrackingLookAways,
+            weeklyBreakCounts = weeklyBreakCounts,
             lastBreakDate = lastDate,
         )
     }
@@ -171,17 +200,38 @@ object StatsManager {
     fun recordLookAwayBreak(context: Context): UserStats {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val today = getTodayDateString()
-        val streak = prefs.getInt(KEY_STREAK, 0) + 1
+        val lastDate = prefs.getString(KEY_LAST_BREAK_DATE, "") ?: ""
+
+        val totalBreaks = prefs.getInt(KEY_TOTAL_BREAKS, 0) + 1
+        var streak = prefs.getInt(KEY_STREAK, 0)
+
+        if (lastDate != today) {
+            val calendar = Calendar.getInstance()
+            calendar.add(Calendar.DAY_OF_YEAR, -1)
+            val yesterday = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendar.time)
+
+            if (lastDate == yesterday || lastDate.isEmpty()) {
+                streak += 1
+            } else {
+                streak = 1
+            }
+        } else {
+            if (streak == 0) streak = 1
+        }
+
         val longestStreak = maxOf(
             streak,
             prefs.getInt(KEY_LONGEST_STREAK, 0)
         )
-        val totalBreaks = prefs.getInt(KEY_TOTAL_BREAKS, 0) + 1
+
+        val todayBreakKey = "break_count_$today"
+        val todayBreaks = prefs.getInt(todayBreakKey, 0) + 1
 
         prefs.edit()
             .putInt(KEY_STREAK, streak)
             .putInt(KEY_LONGEST_STREAK, longestStreak)
             .putInt(KEY_TOTAL_BREAKS, totalBreaks)
+            .putInt(todayBreakKey, todayBreaks)
             .putString(KEY_LAST_BREAK_DATE, today)
             .apply()
 

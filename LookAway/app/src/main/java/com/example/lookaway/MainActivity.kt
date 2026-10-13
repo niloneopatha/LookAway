@@ -10,8 +10,13 @@ import com.example.lookaway.stats.AchievementManager
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -48,6 +53,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.material3.AlertDialog
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -83,6 +91,124 @@ class MainActivity : ComponentActivity() {
             LookAwayTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     NotificationScreen(modifier = Modifier.padding(innerPadding))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun WeeklyBreakGraphContent(
+    context: android.content.Context,
+    userStats: com.example.lookaway.stats.UserStats,
+    isExpanded: Boolean = false
+) {
+    var weekOffset by remember { mutableIntStateOf(0) }
+    val counts = remember(weekOffset, userStats) { StatsManager.getWeekBreakCounts(context, weekOffset) }
+    val avgBreaks = remember(userStats) { StatsManager.getAllTimeAverageBreaks(context) }
+
+    val maxCount = maxOf(counts.maxOrNull() ?: 1, 5)
+    val dateFormat = SimpleDateFormat("EEE", Locale.getDefault())
+
+    val labels = mutableListOf<String>()
+    val calendar = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -(weekOffset * 7)) }
+    for (i in 6 downTo 0) {
+        val cal = Calendar.getInstance().apply {
+            time = calendar.time
+            add(Calendar.DAY_OF_YEAR, -i)
+        }
+        labels.add(dateFormat.format(cal.time))
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = when (weekOffset) {
+                    0 -> "This Week 📈"
+                    1 -> "Last Week 📈"
+                    else -> "$weekOffset Weeks Ago 📈"
+                },
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontWeight = FontWeight.Bold
+                )
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                FilledTonalButton(
+                    onClick = { weekOffset += 1 },
+                    modifier = Modifier.size(36.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text("<", fontWeight = FontWeight.Bold)
+                }
+                FilledTonalButton(
+                    onClick = { if (weekOffset > 0) weekOffset -= 1 },
+                    enabled = weekOffset > 0,
+                    modifier = Modifier.size(36.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text(">", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "All-time daily average: ${String.format(Locale.getDefault(), "%.1f", avgBreaks)} breaks/day",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(if (isExpanded) 240.dp else 160.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Bottom
+        ) {
+            counts.forEachIndexed { index, count ->
+                val heightFraction = (count.toFloat() / maxCount.toFloat()).coerceIn(0.05f, 1f)
+                val barMaxHeight = if (isExpanded) 150.dp else 90.dp
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Bottom,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                ) {
+                    Text(
+                        text = "$count",
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .width(if (isExpanded) 32.dp else 20.dp)
+                            .height(barMaxHeight * heightFraction)
+                            .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
+                            .background(
+                                if (count > 0) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.surfaceVariant
+                            )
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = labels.getOrElse(index) { "" },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
                 }
             }
         }
@@ -687,6 +813,65 @@ fun NotificationScreen(modifier: Modifier = Modifier) {
                     )
                 }
             }
+        }
+
+        var showExpandedGraph by remember { mutableStateOf(false) }
+
+        // Weekly Break Graph Card
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Weekly Break History 📈",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Break counts over past 7 days",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    FilledTonalButton(
+                        onClick = { showExpandedGraph = true },
+                        modifier = Modifier.size(36.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Text("⤢", fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                WeeklyBreakGraphContent(context = context, userStats = userStats, isExpanded = false)
+            }
+        }
+
+        if (showExpandedGraph) {
+            AlertDialog(
+                onDismissRequest = { showExpandedGraph = false },
+                confirmButton = {
+                    Button(onClick = { showExpandedGraph = false }) {
+                        Text("Close")
+                    }
+                },
+                title = { Text("Expanded Weekly Graph 📈") },
+                text = {
+                    WeeklyBreakGraphContent(context = context, userStats = userStats, isExpanded = true)
+                },
+                shape = RoundedCornerShape(24.dp)
+            )
         }
 
         // Achievements Card
